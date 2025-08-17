@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, Response
 from flask_cors import CORS
 from flask_mail import Mail, Message
 import os
@@ -204,6 +204,103 @@ def handle_contact_form():
 @app.route('/api/contact-messages')
 def get_contact_messages():
     return jsonify(contact_messages)
+
+# Admin dashboard to view contact messages
+@app.route('/admin/messages')
+def admin_messages():
+    if not contact_messages:
+        return """
+        <html>
+        <head><title>Admin - Contact Messages</title></head>
+        <body style="font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5;">
+            <h1>📧 Contact Messages Dashboard</h1>
+            <p>No messages received yet.</p>
+            <p><a href="/">← Back to Portfolio</a></p>
+        </body>
+        </html>
+        """
+    
+    html = """
+    <html>
+    <head>
+        <title>Admin - Contact Messages</title>
+        <style>
+            body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
+            .container { max-width: 1200px; margin: 0 auto; }
+            .header { background: #3b82f6; color: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+            .message-card { background: white; padding: 20px; margin: 10px 0; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+            .message-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+            .message-name { font-weight: bold; color: #3b82f6; font-size: 18px; }
+            .message-email { color: #666; }
+            .message-subject { font-weight: bold; margin: 10px 0; }
+            .message-content { background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 10px 0; }
+            .message-time { color: #999; font-size: 12px; }
+            .back-link { display: inline-block; margin-top: 20px; padding: 10px 20px; background: #3b82f6; color: white; text-decoration: none; border-radius: 5px; }
+            .stats { background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>📧 Contact Messages Dashboard</h1>
+                <p>Total Messages: """ + str(len(contact_messages)) + """</p>
+            </div>
+            
+            <div class="stats">
+                <h3>📊 Quick Stats</h3>
+                <p><strong>Latest Message:</strong> """ + contact_messages[-1]['timestamp'][:19].replace('T', ' ') + """</p>
+                <p><strong>First Message:</strong> """ + contact_messages[0]['timestamp'][:19].replace('T', ' ') + """</p>
+            </div>
+    """
+    
+    # Add messages in reverse chronological order (newest first)
+    for message in reversed(contact_messages):
+        html += f"""
+            <div class="message-card">
+                <div class="message-header">
+                    <div>
+                        <div class="message-name">{message['name']}</div>
+                        <div class="message-email">{message['email']}</div>
+                    </div>
+                    <div class="message-time">{message['timestamp'][:19].replace('T', ' ')}</div>
+                </div>
+                <div class="message-subject">Subject: {message['subject']}</div>
+                <div class="message-content">{message['message']}</div>
+            </div>
+        """
+    
+    html += """
+            <a href="/" class="back-link">← Back to Portfolio</a>
+        </div>
+    </body>
+    </html>
+    """
+    
+    return html
+
+# Export contact messages as text file
+@app.route('/admin/export-messages')
+def export_messages():
+    if not contact_messages:
+        return "No messages to export."
+    
+    # Create text content
+    content = f"Contact Messages Export - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+    content += "=" * 50 + "\n\n"
+    
+    for i, message in enumerate(contact_messages, 1):
+        content += f"Message #{i}\n"
+        content += f"Name: {message['name']}\n"
+        content += f"Email: {message['email']}\n"
+        content += f"Subject: {message['subject']}\n"
+        content += f"Time: {message['timestamp']}\n"
+        content += f"Message:\n{message['message']}\n"
+        content += "-" * 30 + "\n\n"
+    
+    # Return as downloadable file
+    return Response(content, mimetype='text/plain', headers={
+        'Content-Disposition': f'attachment; filename=contact-messages-{datetime.now().strftime("%Y%m%d-%H%M%S")}.txt'
+    })
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
