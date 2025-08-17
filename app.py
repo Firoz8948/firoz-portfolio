@@ -1,6 +1,5 @@
 from flask import Flask, jsonify, render_template, request, Response
 from flask_cors import CORS
-from flask_mail import Mail, Message
 import os
 from dotenv import load_dotenv
 from datetime import datetime
@@ -10,15 +9,6 @@ load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
-
-# Email configuration
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-app.config['MAIL_PORT'] = 587
-app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', 'firoz8948@gmail.com')
-app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', 'your-app-password')
-
-mail = Mail(app)
 
 # Portfolio data
 portfolio_data = {
@@ -128,6 +118,20 @@ portfolio_data = {
 # Store contact messages (simple in-memory storage)
 contact_messages = []
 
+# Add a simple notification system
+def log_contact_message(message_data):
+    """Log contact message with timestamp"""
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    log_entry = f"[{timestamp}] NEW MESSAGE: {message_data['name']} ({message_data['email']}) - {message_data['subject']}"
+    print(log_entry)
+    
+    # Also log to a file if possible
+    try:
+        with open('contact_log.txt', 'a', encoding='utf-8') as f:
+            f.write(log_entry + '\n')
+    except:
+        pass  # File logging is optional
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -175,7 +179,7 @@ def handle_contact_form():
         if not all([name, email, subject, message]):
             return jsonify({'success': False, 'message': 'All fields are required'}), 400
         
-        # Store the message (in production, you'd save to a database)
+        # Store the message
         contact_data = {
             'name': name,
             'email': email,
@@ -185,8 +189,8 @@ def handle_contact_form():
         }
         contact_messages.append(contact_data)
         
-        # Log the contact form submission
-        print(f"New contact form submission: {name} ({email}) - {subject}")
+        # Log the message for easy monitoring
+        log_contact_message(contact_data)
         
         return jsonify({
             'success': True, 
@@ -301,6 +305,63 @@ def export_messages():
     return Response(content, mimetype='text/plain', headers={
         'Content-Disposition': f'attachment; filename=contact-messages-{datetime.now().strftime("%Y%m%d-%H%M%S")}.txt'
     })
+
+# Simple status page to show message count
+@app.route('/admin/status')
+def admin_status():
+    total_messages = len(contact_messages)
+    latest_message = contact_messages[-1] if contact_messages else None
+    
+    html = f"""
+    <html>
+    <head>
+        <title>Portfolio Status</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }}
+            .container {{ max-width: 800px; margin: 0 auto; }}
+            .header {{ background: #3b82f6; color: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; }}
+            .stat-card {{ background: white; padding: 20px; margin: 10px 0; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+            .message-preview {{ background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 10px 0; }}
+            .nav-links {{ margin-top: 20px; }}
+            .nav-links a {{ display: inline-block; margin: 5px; padding: 10px 20px; background: #3b82f6; color: white; text-decoration: none; border-radius: 5px; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>📊 Portfolio Status Dashboard</h1>
+                <p>Monitor your portfolio activity and contact messages</p>
+            </div>
+            
+            <div class="stat-card">
+                <h3>📧 Contact Messages</h3>
+                <p><strong>Total Messages:</strong> {total_messages}</p>
+                <p><strong>Status:</strong> {'🟢 Active' if total_messages > 0 else '🔴 No messages yet'}</p>
+            </div>
+            
+            {f'''
+            <div class="stat-card">
+                <h3>📝 Latest Message</h3>
+                <div class="message-preview">
+                    <p><strong>From:</strong> {latest_message['name']} ({latest_message['email']})</p>
+                    <p><strong>Subject:</strong> {latest_message['subject']}</p>
+                    <p><strong>Time:</strong> {latest_message['timestamp'][:19].replace('T', ' ')}</p>
+                    <p><strong>Message:</strong> {latest_message['message'][:100]}{'...' if len(latest_message['message']) > 100 else ''}</p>
+                </div>
+            </div>
+            ''' if latest_message else ''}
+            
+            <div class="nav-links">
+                <a href="/admin/messages">📧 View All Messages</a>
+                <a href="/admin/export-messages">📥 Export Messages</a>
+                <a href="/">🏠 Back to Portfolio</a>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    return html
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
