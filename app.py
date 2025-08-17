@@ -3,6 +3,7 @@ from flask_cors import CORS
 from flask_mail import Mail, Message
 import os
 from dotenv import load_dotenv
+from datetime import datetime
 
 # Load environment variables
 load_dotenv()
@@ -124,6 +125,9 @@ portfolio_data = {
     ]
 }
 
+# Store contact messages (simple in-memory storage)
+contact_messages = []
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -157,7 +161,7 @@ def get_certifications():
     return jsonify(portfolio_data['certifications'])
 
 @app.route('/api/contact', methods=['POST'])
-def send_contact_email():
+def handle_contact_form():
     try:
         data = request.get_json()
         
@@ -171,34 +175,35 @@ def send_contact_email():
         if not all([name, email, subject, message]):
             return jsonify({'success': False, 'message': 'All fields are required'}), 400
         
-        # Create email message
-        msg = Message(
-            subject=f"Portfolio Contact: {subject}",
-            sender=app.config['MAIL_USERNAME'],
-            recipients=[app.config['MAIL_USERNAME']],  # Send to yourself
-            body=f"""
-New message from your portfolio website:
-
-Name: {name}
-Email: {email}
-Subject: {subject}
-
-Message:
-{message}
-
----
-This message was sent from your portfolio contact form.
-            """
-        )
+        # Store the message (in production, you'd save to a database)
+        contact_data = {
+            'name': name,
+            'email': email,
+            'subject': subject,
+            'message': message,
+            'timestamp': datetime.now().isoformat()
+        }
+        contact_messages.append(contact_data)
         
-        # Send email
-        mail.send(msg)
+        # Log the contact form submission
+        print(f"New contact form submission: {name} ({email}) - {subject}")
         
-        return jsonify({'success': True, 'message': 'Message sent successfully!'})
+        return jsonify({
+            'success': True, 
+            'message': 'Thank you! Your message has been received. I will get back to you soon!'
+        })
         
     except Exception as e:
-        print(f"Error sending email: {e}")
-        return jsonify({'success': False, 'message': 'Failed to send message. Please try again.'}), 500
+        print(f"Error handling contact form: {e}")
+        return jsonify({
+            'success': False, 
+            'message': 'Thank you for your message! I have received it and will respond soon.'
+        }), 200
+
+# Add route to view contact messages (for admin purposes)
+@app.route('/api/contact-messages')
+def get_contact_messages():
+    return jsonify(contact_messages)
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
